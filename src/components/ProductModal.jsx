@@ -20,13 +20,16 @@ const EMPTY = {
   status: 'draft',
   price: '',
   costPrice: '',
+  sellingPrice: '',
   stock: '',
   productUrl: '',
   imageUrl: '',
   imageData: '',
+  categoryId: null,
+  distributorVisible: false,
 };
 
-export default function ProductModal({ open, product, onClose, onSave }) {
+export default function ProductModal({ open, product, onClose, onSave, categories, initialCategoryId }) {
   const [form, setForm] = useState(EMPTY);
   const [hasImage, setHasImage] = useState(false);
   const fileInputRef = useRef(null);
@@ -41,15 +44,18 @@ export default function ProductModal({ open, product, onClose, onSave }) {
           status: product.status || 'draft',
           price: product.price,
           costPrice: product.costPrice || '',
+          sellingPrice: product.sellingPrice || '',
           stock: product.stock ?? '',
           productUrl: product.productUrl || '',
           imageUrl: product.imageUrl || '',
           imageData: product.imageData || '',
+          categoryId: product.categoryId ?? null,
+          distributorVisible: Boolean(product.distributorVisible),
         }
-      : EMPTY;
+      : { ...EMPTY, categoryId: initialCategoryId ?? null };
     setForm(base);
     setHasImage(Boolean(base.imageUrl || base.imageData));
-  }, [open, product]);
+  }, [open, product, initialCategoryId]);
 
   useEffect(() => {
     if (open) requestAnimationFrame(() => nameRef.current?.focus());
@@ -113,10 +119,13 @@ export default function ProductModal({ open, product, onClose, onSave }) {
       status: form.status,
       price: parseFloat(form.price),
       costPrice: form.costPrice ? parseFloat(form.costPrice) : 0,
+      sellingPrice: form.sellingPrice ? parseFloat(form.sellingPrice) : null,
       stock: form.stock ? parseInt(form.stock, 10) : 0,
       productUrl: form.productUrl.trim(),
       imageUrl: form.imageUrl.trim(),
       imageData: form.imageData || '',
+      categoryId: form.categoryId,
+      distributorVisible: form.distributorVisible,
     };
     if (!data.name || isNaN(data.price)) return;
     onSave(data, product ? product.id : null);
@@ -147,12 +156,36 @@ export default function ProductModal({ open, product, onClose, onSave }) {
             </select>
           </div>
           <div className="form-group">
+            <label htmlFor="productCategory">التصنيف</label>
+            <select id="productCategory" value={form.categoryId ?? ''} onChange={e => set('categoryId', e.target.value ? parseInt(e.target.value, 10) : null)}>
+              <option value="">بدون تصنيف</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
             <label htmlFor="productPrice">سعر البيع</label>
             <input id="productPrice" type="number" step="0.01" required value={form.price} onChange={e => set('price', e.target.value)} />
           </div>
           <div className="form-group">
             <label htmlFor="productCostPrice">سعر التكلفة</label>
             <input id="productCostPrice" type="number" step="0.01" value={form.costPrice} onChange={e => set('costPrice', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label htmlFor="productSellingPrice">سعر بيع الموزع</label>
+            <input id="productSellingPrice" type="number" step="0.01" value={form.sellingPrice} onChange={e => set('sellingPrice', e.target.value)} />
+          </div>
+          <div className="form-group checkbox-group">
+            <label className="checkbox-label">
+              <input
+                id="productDistributorVisible"
+                type="checkbox"
+                checked={form.distributorVisible}
+                onChange={e => set('distributorVisible', e.target.checked)}
+              />
+              <span>إظهار للموزع</span>
+            </label>
           </div>
           <div className="form-group">
             <label htmlFor="productStock">الكمية</label>

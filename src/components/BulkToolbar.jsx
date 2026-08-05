@@ -2,13 +2,12 @@ import CustomSelect from './CustomSelect';
 
 export default function BulkToolbar({
   selectedIds,
-  products,
   categories,
   moveCategoryId,
   onMoveCategoryChange,
   onSelectAll,
-  onStatus,
-  onSend,
+  onShow,
+  onHide,
   onDelete,
   onMove,
 }) {
@@ -26,9 +25,11 @@ export default function BulkToolbar({
           value={moveCategoryId}
           onChange={onMoveCategoryChange}
         />
-        <button type="button" className="btn btn-secondary" onClick={onStatus}>تعيين جاهز للنشر</button>
-        <button type="button" className="btn btn-secondary" onClick={onSend}>
-          <i className="fa-solid fa-truck" /> إرسال إلى الموزع
+        <button type="button" className="btn btn-secondary" onClick={onShow}>
+          <i className="fa-solid fa-eye" /> إظهار للموزع
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={onHide}>
+          <i className="fa-solid fa-eye-slash" /> إخفاء من الموزع
         </button>
         <button type="button" className="btn btn-danger" onClick={onDelete}>
           <i className="fa-solid fa-trash-can" /> حذف المحدد

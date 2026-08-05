@@ -23,7 +23,7 @@ export default function CustomSelect({ id, options, value, onChange }) {
   const label = selected ? selected.label : (options[0]?.label || '');
 
   return (
-    <div className="custom-select" ref={wrapperRef} data-select-id={id}>
+    <div className={`custom-select${open ? ' is-open' : ''}`} ref={wrapperRef} data-select-id={id}>
       <button
         type="button"
         className="custom-select-trigger"

@@ -114,7 +114,7 @@ export function ContextMenu({ menu, onAction, onClose }) {
         }}
       >
         <button data-action="move"><i className="fa-solid fa-arrow-right" /> نقل إلى تصنيف...</button>
-        <button data-action="send"><i className="fa-solid fa-truck" /> إرسال إلى الموزع</button>
+        <button data-action="visibility"><i className="fa-solid fa-eye" /> إظهار/إخفاء للموزع</button>
         <button data-action="edit"><i className="fa-solid fa-pencil" /> تعديل</button>
         <button data-action="delete"><i className="fa-solid fa-trash-can" /> حذف</button>
       </div>

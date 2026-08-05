@@ -17,76 +17,125 @@ function getClient() {
   return client;
 }
 
-function makeSnapshot(product) {
-  const { imageData, ...rest } = product;
-  return rest;
+function toCamel(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    description: row.description,
+    price: row.price,
+    costPrice: row.cost_price,
+    sellingPrice: row.selling_price,
+    stock: row.stock,
+    productUrl: row.product_url,
+    imageUrl: row.image_url,
+    imageData: row.image_data,
+    categoryId: row.category_id,
+    distributorVisible: row.distributor_visible,
+    createdAt: row.created_at,
+    ...(row.data || {}),
+  };
 }
 
-export async function sendToDistributor(products) {
-  const db = getClient();
-  const localIds = products.map(p => p.id);
+const SNAKE_KEYS = {
+  name: 'name',
+  status: 'status',
+  description: 'description',
+  price: 'price',
+  costPrice: 'cost_price',
+  sellingPrice: 'selling_price',
+  stock: 'stock',
+  productUrl: 'product_url',
+  imageUrl: 'image_url',
+  imageData: 'image_data',
+  categoryId: 'category_id',
+  distributorVisible: 'distributor_visible',
+};
 
-  const { data: existing, error: selErr } = await db
-    .from('products')
-    .select('id, data')
-    .eq('status', 'pending');
-  if (selErr) throw selErr;
-
-  const toRemove = (existing || [])
-    .filter(r => r.data && localIds.includes(r.data.id))
-    .map(r => r.id);
-  if (toRemove.length > 0) {
-    const { error: delErr } = await db.from('products').delete().in('id', toRemove);
-    if (delErr) throw delErr;
+function toSnake(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k in SNAKE_KEYS && v !== undefined) out[SNAKE_KEYS[k]] = v;
   }
-
-  const rows = products.map(p => ({
-    name: p.name,
-    status: 'pending',
-    cost_price: null,
-    selling_price: null,
-    data: makeSnapshot(p),
-  }));
-
-  const { error: insErr } = await db.from('products').insert(rows);
-  if (insErr) throw insErr;
-  return rows.length;
+  return out;
 }
 
-export async function getPendingProducts() {
+// ====== Categories ======
+
+export async function fetchCategories() {
   const db = getClient();
-  const { data, error } = await db
-    .from('products')
-    .select('*')
-    .eq('status', 'pending')
-    .order('created_at', { ascending: true });
+  const { data, error } = await db.from('categories').select('*').order('created_at', { ascending: true });
   if (error) throw error;
   return data || [];
 }
 
-export async function getPricedProducts() {
+export async function createCategory(name) {
   const db = getClient();
-  const { data, error } = await db
-    .from('products')
-    .select('*')
-    .eq('status', 'priced')
-    .order('created_at', { ascending: false });
+  const { data, error } = await db.from('categories').insert({ name }).select().single();
   if (error) throw error;
-  return data || [];
+  return data;
+}
+
+export async function deleteCategory(id) {
+  const db = getClient();
+  const { error } = await db.from('categories').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ====== Products ======
+
+export async function fetchProducts() {
+  const db = getClient();
+  const { data, error } = await db.from('products').select('*').order('id', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(toCamel);
+}
+
+export async function createProduct(input) {
+  const db = getClient();
+  const { data, error } = await db.from('products').insert(toSnake(input)).select().single();
+  if (error) throw error;
+  return toCamel(data);
+}
+
+export async function updateProduct(id, updates) {
+  const db = getClient();
+  const { data, error } = await db.from('products').update(toSnake(updates)).eq('id', id).select().single();
+  if (error) throw error;
+  return toCamel(data);
+}
+
+export async function updateProducts(ids, updates) {
+  if (!ids.length) return [];
+  const db = getClient();
+  const { data, error } = await db.from('products').update(toSnake(updates)).in('id', ids).select();
+  if (error) throw error;
+  return (data || []).map(toCamel);
+}
+
+export async function insertProducts(items) {
+  if (!items.length) return [];
+  const db = getClient();
+  const { data, error } = await db.from('products').insert(items.map(toSnake)).select();
+  if (error) throw error;
+  return (data || []).map(toCamel);
+}
+
+export async function deleteProducts(ids) {
+  if (!ids.length) return;
+  const db = getClient();
+  const { error } = await db.from('products').delete().in('id', ids);
+  if (error) throw error;
+}
+
+export async function setDistributorVisible(ids, visible) {
+  return updateProducts(ids, { distributorVisible: visible });
 }
 
 export async function savePrices(rows) {
-  const db = getClient();
   for (const r of rows) {
-    const { error } = await db
-      .from('products')
-      .update({
-        cost_price: r.cost_price,
-        selling_price: r.selling_price,
-        status: 'priced',
-      })
-      .eq('id', r.id);
-    if (error) throw error;
+    await updateProduct(r.id, { costPrice: r.costPrice, sellingPrice: r.sellingPrice });
   }
   return rows.length;
 }

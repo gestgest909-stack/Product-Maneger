@@ -22,6 +22,7 @@ function ProductCard({
   onDelete,
   onLongPress,
   onDragStart,
+  onToggleVisible,
 }) {
   let longPressTimer = null;
 
@@ -86,6 +87,9 @@ function ProductCard({
         {product.status && (
           <span className={`status-pill ${product.status}`}>{STATUS_LABELS[product.status] || product.status}</span>
         )}
+        {product.distributorVisible && (
+          <span className="visibility-pill" title="ظاهر للموزع"><i className="fa-solid fa-eye" /> ظاهر للموزع</span>
+        )}
         {product.stock !== undefined && product.stock !== null && (
           <span className={`product-stock${product.stock <= 0 ? ' low' : ''}`}>المخزون: {product.stock}</span>
         )}
@@ -98,6 +102,9 @@ function ProductCard({
       )}
 
       <div className="product-actions">
+        <button type="button" className="edit-btn" title={product.distributorVisible ? 'إخفاء من الموزع' : 'إظهار للموزع'} onClick={() => onToggleVisible(product)}>
+          <i className={`fa-solid ${product.distributorVisible ? 'fa-eye-slash' : 'fa-eye'}`} />
+        </button>
         <button type="button" className="edit-btn" title="تعديل المنتج" onClick={() => onEdit(product)}>
           <i className="fa-solid fa-pencil" />
         </button>
@@ -132,6 +139,7 @@ export default function ProductsGrid({ products, selectedIds, callbacks }) {
           onDelete={callbacks.onDelete}
           onLongPress={callbacks.onLongPress}
           onDragStart={callbacks.onDragStart}
+          onToggleVisible={callbacks.onToggleVisible}
         />
       ))}
     </div>

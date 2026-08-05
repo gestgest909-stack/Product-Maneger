@@ -64,7 +64,7 @@ const STATUS_LABELS = { draft: 'مسودة', ready: 'جاهز للنشر', publi
 const STATUS_FROM_LABEL = { 'مسودة': 'draft', 'جاهز للنشر': 'ready', 'منشور': 'published' };
 
 export function exportToCSVString(products, categories) {
-  const headers = ['الاسم', 'الوصف', 'الحالة', 'سعر البيع', 'سعر التكلفة', 'الكمية', 'رابط_المنتج', 'رابط_الصورة', 'بيانات_الصورة', 'التصنيف', 'معرف_التصنيف'];
+  const headers = ['الاسم', 'الوصف', 'الحالة', 'سعر البيع', 'سعر التكلفة', 'الكمية', 'رابط_المنتج', 'رابط_الصورة', 'بيانات_الصورة', 'التصنيف', 'معرف_التصنيف', 'مرئي_للموزع'];
   const rows = products.filter(p => !p.isDeleted).map(p => {
     const cat = categories.find(c => c.id === p.categoryId);
     return [
@@ -79,6 +79,7 @@ export function exportToCSVString(products, categories) {
       escapeCSV(p.imageData || ''),
       escapeCSV(cat ? cat.name : ''),
       escapeCSV(String(cat ? cat.id : '')),
+      p.distributorVisible ? 'نعم' : '',
     ].join(',');
   });
   return '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');

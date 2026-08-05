@@ -42,6 +42,7 @@ export async function parseCSVImport(text, { categories, createCategory, selecte
         imageUrl: row['رابط_الصورة'] || '',
         imageData: row['بيانات_الصورة'] || '',
         categoryId,
+        distributorVisible: row['مرئي_للموزع']?.trim() === 'نعم',
       };
       if (!product.name) {
         errors.push(`السطر ${i + 2}: الاسم مطلوب`);

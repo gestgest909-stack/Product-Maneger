@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
-import { IS_CONFIGURED, sendToDistributor } from '../lib/supabase';
 import { parseCSVImport } from '../lib/csv-import';
 import { escapeHtml } from '../lib/utils';
 
@@ -12,9 +11,12 @@ import ProductsGrid from '../components/ProductsGrid';
 import BulkToolbar from '../components/BulkToolbar';
 import ProductModal from '../components/ProductModal';
 import ConfirmDialog from '../components/ConfirmDialog';
-import PricedModal from '../components/PricedModal';
 import CustomSelect from '../components/CustomSelect';
+import AdminLoginModal from '../components/AdminLoginModal';
+import GuestGrid from '../components/GuestGrid';
 import { MobileTabbar, MobileSearchBar, CategorySheet, ContextMenu } from '../components/Mobile';
+
+const ADMIN_FLAG = 'product_manager_admin';
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'الأحدث' },
@@ -30,6 +32,10 @@ export default function Admin() {
   const { categories, products, ready } = data;
   const { showToast } = useToast();
 
+  const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem(ADMIN_FLAG) === '1');
+  const [view, setView] = useState(() => (sessionStorage.getItem(ADMIN_FLAG) === '1' ? 'admin' : 'guest'));
+  const [loginOpen, setLoginOpen] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
@@ -38,7 +44,6 @@ export default function Admin() {
 
   const [productModal, setProductModal] = useState({ open: false, product: null });
   const [confirm, setConfirm] = useState(null);
-  const [pricedOpen, setPricedOpen] = useState(false);
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [moveTarget, setMoveTarget] = useState(null);
@@ -46,10 +51,8 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState('products');
   const [contextMenu, setContextMenu] = useState(null);
 
-  const activeProducts = useMemo(() => products.filter(p => !p.isDeleted), [products]);
-
   const filtered = useMemo(() => {
-    let list = activeProducts;
+    let list = products;
     if (selectedCategoryId !== null) {
       list = list.filter(p => p.categoryId === selectedCategoryId);
     }
@@ -67,37 +70,39 @@ export default function Admin() {
       default: sorted.sort((a, b) => b.id - a.id);
     }
     return sorted;
-  }, [activeProducts, selectedCategoryId, searchQuery, sortBy]);
+  }, [products, selectedCategoryId, searchQuery, sortBy]);
 
   const selectedProducts = useMemo(
-    () => activeProducts.filter(p => selectedIds.includes(p.id)),
-    [activeProducts, selectedIds]
+    () => products.filter(p => selectedIds.includes(p.id)),
+    [products, selectedIds]
   );
 
   const categoryTitle = selectedCategoryId === null
     ? 'جميع المنتجات'
     : (categories.find(c => c.id === selectedCategoryId)?.name || 'جميع المنتجات');
 
-  function notifyError(err) {
-    showToast(`<i class="fa-solid fa-circle-xmark"></i> ${escapeHtml(err.message)}`, 'error', 5000);
+  function handleLoginSuccess() {
+    sessionStorage.setItem(ADMIN_FLAG, '1');
+    setIsAdmin(true);
+    setView('admin');
+    showToast('<i class="fa-solid fa-lock-open"></i> تم تسجيل دخول المدير');
   }
 
-  async function sendProducts(productsToSend) {
-    if (productsToSend.length === 0) {
-      showToast('يرجى تحديد المنتجات أولاً', 'error');
+  function handleLogout() {
+    sessionStorage.removeItem(ADMIN_FLAG);
+    setIsAdmin(false);
+    setView('guest');
+    setSelectedIds([]);
+    showToast('<i class="fa-solid fa-right-from-bracket"></i> تم تسجيل الخروج');
+  }
+
+  function toggleView() {
+    if (!isAdmin) {
+      setLoginOpen(true);
       return;
     }
-    if (!IS_CONFIGURED) {
-      showToast('<i class="fa-solid fa-circle-xmark"></i> Supabase غير مكوّن. ضع المفاتيح في ملف .env', 'error', 5000);
-      return;
-    }
-    try {
-      const count = await sendToDistributor(productsToSend);
-      setSelectedIds([]);
-      showToast(`<i class="fa-solid fa-truck"></i> تم إرسال ${count} منتج إلى الموزع`);
-    } catch (err) {
-      notifyError(err);
-    }
+    setView(v => (v === 'admin' ? 'guest' : 'admin'));
+    setSelectedIds([]);
   }
 
   function toggleSelect(id) {
@@ -114,27 +119,19 @@ export default function Admin() {
   }
 
   function handleInlineUpdate(productId, field, value) {
-    try {
-      data.updateProduct(productId, { [field]: value });
-      showToast('<i class="fa-solid fa-check-circle"></i> تم تحديث المنتج بنجاح');
-    } catch {
-      showToast('<i class="fa-solid fa-circle-xmark"></i> فشل في تحديث المنتج', 'error');
-    }
+    data.updateProduct(productId, { [field]: value })
+      .then(() => showToast('<i class="fa-solid fa-check-circle"></i> تم تحديث المنتج بنجاح'))
+      .catch(() => showToast('<i class="fa-solid fa-circle-xmark"></i> فشل في تحديث المنتج', 'error'));
   }
 
   function handleSaveProduct(formData, id) {
-    try {
-      if (id) {
-        data.updateProduct(id, formData);
-        showToast('<i class="fa-solid fa-check-circle"></i> تم تحديث المنتج بنجاح');
-      } else {
-        data.createProduct({ ...formData, categoryId: selectedCategoryId });
-        showToast('<i class="fa-solid fa-check-circle"></i> تم إضافة المنتج بنجاح');
-      }
-      setProductModal({ open: false, product: null });
-    } catch {
-      showToast('<i class="fa-solid fa-circle-xmark"></i> فشل في حفظ المنتج', 'error');
-    }
+    const action = id ? data.updateProduct(id, formData) : data.createProduct(formData);
+    action
+      .then(() => {
+        showToast(`<i class="fa-solid fa-check-circle"></i> ${id ? 'تم تحديث المنتج بنجاح' : 'تم إضافة المنتج بنجاح'}`);
+        setProductModal({ open: false, product: null });
+      })
+      .catch(() => showToast('<i class="fa-solid fa-circle-xmark"></i> فشل في حفظ المنتج', 'error'));
   }
 
   function confirmThen(message, callback) {
@@ -145,13 +142,7 @@ export default function Admin() {
     confirmThen(`هل أنت متأكد من حذف "${product.name}"؟`, () => {
       data.deleteProduct(product.id);
       setSelectedIds(ids => ids.filter(x => x !== product.id));
-      showToast('<i class="fa-solid fa-trash-can"></i> تم حذف المنتج', 'success', 6000, {
-        label: 'تراجع',
-        onClick: () => {
-          data.updateProduct(product.id, { isDeleted: false });
-          showToast('<i class="fa-solid fa-check-circle"></i> تم استعادة المنتج');
-        },
-      });
+      showToast('<i class="fa-solid fa-trash-can"></i> تم حذف المنتج');
     });
   }
 
@@ -165,8 +156,15 @@ export default function Admin() {
     });
   }
 
+  function handleToggleVisible(product) {
+    const next = !product.distributorVisible;
+    data.setVisible([product.id], next)
+      .then(() => showToast(`<i class="fa-solid fa-eye"></i> ${next ? 'أصبح المنتج ظاهراً للموزع' : 'أصبح المنتج مخفياً عن الموزع'}`))
+      .catch(() => showToast('<i class="fa-solid fa-circle-xmark"></i> فشل التحديث', 'error'));
+  }
+
   function handleMoveProduct(productId, categoryId) {
-    const product = activeProducts.find(p => p.id === productId);
+    const product = filtered.find(p => p.id === productId);
     data.moveProduct(productId, categoryId);
     const catName = categories.find(c => c.id === categoryId)?.name || '';
     showToast(`<i class="fa-solid fa-check-circle"></i> تم نقل "${escapeHtml(product?.name || '')}" إلى ${escapeHtml(catName)}`);
@@ -193,9 +191,9 @@ export default function Admin() {
     setMoveCategoryId('');
   }
 
-  function handleBulkStatus() {
-    data.bulkUpdate(selectedIds, { status: 'ready' });
-    showToast(`<i class="fa-solid fa-check-circle"></i> تم تعيين ${selectedIds.length} منتج كـ "جاهز للنشر"`);
+  function handleBulkVisible(visible) {
+    data.setVisible(selectedIds, visible);
+    showToast(`<i class="fa-solid fa-check-circle"></i> تم ${visible ? 'إظهار' : 'إخفاء'} ${selectedIds.length} منتج ${visible ? 'للموزع' : 'من الموزع'}`);
     setSelectedIds([]);
   }
 
@@ -207,7 +205,7 @@ export default function Admin() {
         selectedCategoryId,
       });
       if (created.length > 0) {
-        data.bulkCreate(created);
+        await data.bulkCreate(created);
       }
       if (created.length > 0 && errors.length === 0) {
         showToast(`<i class="fa-solid fa-check-circle"></i> تم استيراد ${created.length} منتج بنجاح`);
@@ -223,7 +221,6 @@ export default function Admin() {
 
   function handleContextAction(action) {
     const product = contextMenu?.product;
-    const pos = contextMenu;
     setContextMenu(null);
     if (!product) return;
     switch (action) {
@@ -231,8 +228,8 @@ export default function Admin() {
         setMoveTarget(product);
         setSheetOpen(true);
         break;
-      case 'send':
-        sendProducts([product]);
+      case 'visibility':
+        handleToggleVisible(product);
         break;
       case 'edit':
         setProductModal({ open: true, product });
@@ -261,9 +258,7 @@ export default function Admin() {
     if (tab === 'categories') setSheetOpen(true);
     if (tab === 'search') {
       setMobileSearchOpen(o => {
-        if (o) {
-          setSearchQuery('');
-        }
+        if (o) setSearchQuery('');
         return !o;
       });
     }
@@ -271,10 +266,15 @@ export default function Admin() {
 
   useEffect(() => {
     const onKey = (e) => {
+      if (e.altKey && (e.key === 'q' || e.key === 'Q' || e.code === 'KeyQ')) {
+        e.preventDefault();
+        setLoginOpen(true);
+        return;
+      }
       if (e.key !== 'Escape') return;
+      setLoginOpen(false);
       setProductModal(m => (m.open ? { open: false, product: null } : m));
       setConfirm(null);
-      setPricedOpen(false);
       setSheetOpen(false);
       setMoveTarget(null);
       setContextMenu(null);
@@ -283,12 +283,38 @@ export default function Admin() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
+  useEffect(() => {
+    if (!isAdmin) setSelectedIds([]);
+  }, [isAdmin]);
+
   if (!ready) return null;
+
+  if (!isAdmin || view === 'guest') {
+    return (
+      <div id="app">
+        <TopBar
+          isAdmin={isAdmin}
+          onOpenLogin={() => setLoginOpen(true)}
+          onLogout={handleLogout}
+          view={view}
+          onToggleView={toggleView}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
+        <GuestGrid />
+        <AdminLoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={handleLoginSuccess} />
+      </div>
+    );
+  }
 
   return (
     <div id="app">
       <TopBar
-        onOpenPriced={() => setPricedOpen(true)}
+        isAdmin
+        onOpenLogin={() => setLoginOpen(true)}
+        onLogout={handleLogout}
+        view={view}
+        onToggleView={toggleView}
         onImportFile={handleImportFile}
         searchQuery={searchQuery}
         onSearchChange={(q) => { setSearchQuery(q); setSelectedIds([]); }}
@@ -327,6 +353,7 @@ export default function Admin() {
               onEdit: (product) => setProductModal({ open: true, product }),
               onDelete: handleDeleteProduct,
               onLongPress: (product, x, y) => setContextMenu({ product, x, y }),
+              onToggleVisible: handleToggleVisible,
             }}
           />
         </main>
@@ -338,8 +365,8 @@ export default function Admin() {
         moveCategoryId={moveCategoryId}
         onMoveCategoryChange={setMoveCategoryId}
         onSelectAll={selectAllVisible}
-        onStatus={handleBulkStatus}
-        onSend={() => sendProducts(selectedProducts)}
+        onShow={() => handleBulkVisible(true)}
+        onHide={() => handleBulkVisible(false)}
         onDelete={handleBulkDelete}
         onMove={handleBulkMove}
       />
@@ -349,6 +376,8 @@ export default function Admin() {
         product={productModal.product}
         onClose={() => setProductModal({ open: false, product: null })}
         onSave={handleSaveProduct}
+        categories={categories}
+        initialCategoryId={selectedCategoryId}
       />
 
       <ConfirmDialog
@@ -358,7 +387,7 @@ export default function Admin() {
         onConfirm={() => { confirm?.callback(); setConfirm(null); }}
       />
 
-      <PricedModal open={pricedOpen} onClose={() => setPricedOpen(false)} />
+      <AdminLoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={handleLoginSuccess} />
 
       <MobileTabbar activeTab={activeTab} onTab={handleTab} onAdd={() => setProductModal({ open: true, product: null })} />
       <MobileSearchBar open={mobileSearchOpen} value={searchQuery} onChange={setSearchQuery} onClose={() => setMobileSearchOpen(false)} />

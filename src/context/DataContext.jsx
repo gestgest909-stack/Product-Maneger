@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import * as storage from '../lib/storage';
+import * as api from '../lib/supabase';
 
 const DataContext = createContext(null);
 
@@ -11,104 +11,116 @@ export function DataProvider({ children }) {
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    let cats = storage.getCategories();
-    let prods = storage.getProducts();
-
-    if (cats.length === 0) {
-      cats = [{ id: storage.createLocalId(), name: 'عام' }];
-      storage.setCategories(cats);
+  const refresh = useCallback(async () => {
+    if (!api.IS_CONFIGURED) {
+      setReady(true);
+      setError('Supabase غير مكوّن. ضع VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY في ملف .env');
+      return;
     }
-
-    const now = Date.now();
-    const stale = prods.filter(p => p.isDeleted && now - p.id > 30 * 24 * 60 * 60 * 1000);
-    if (stale.length > 0) {
-      const ids = new Set(stale.map(p => p.id));
-      prods = prods.filter(p => !ids.has(p.id));
-      storage.setProducts(prods);
+    try {
+      const [cats, prods] = await Promise.all([api.fetchCategories(), api.fetchProducts()]);
+      setCategories(cats);
+      setProducts(prods);
+      setError('');
+    } catch (e) {
+      setError(e.message);
     }
-
-    setCategories(cats);
-    setProducts(prods);
     setReady(true);
   }, []);
 
-  const persistCategories = useCallback((cats) => {
-    setCategories(cats);
-    storage.setCategories(cats);
-  }, []);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-  const persistProducts = useCallback((prods) => {
-    setProducts(prods);
-    storage.setProducts(prods);
-  }, []);
-
-  const createCategory = useCallback((name) => {
-    const cat = { id: storage.createLocalId(), name };
-    persistCategories([...categories, cat]);
+  const createCategory = useCallback(async (name) => {
+    const cat = await api.createCategory(name);
+    setCategories(c => [...c, cat]);
     return cat;
-  }, [categories, persistCategories]);
+  }, []);
 
-  const deleteCategory = useCallback((id) => {
-    persistCategories(categories.filter(c => c.id !== id));
-  }, [categories, persistCategories]);
+  const deleteCategory = useCallback(async (id) => {
+    await api.deleteCategory(id);
+    setCategories(c => c.filter(x => x.id !== id));
+    const affected = products.filter(p => p.categoryId === id).map(p => p.id);
+    if (affected.length > 0) {
+      await api.updateProducts(affected, { categoryId: null });
+      setProducts(ps => ps.map(p => (p.categoryId === id ? { ...p, categoryId: null } : p)));
+    }
+  }, [products]);
 
-  const createProduct = useCallback((data) => {
-    const product = { id: storage.createLocalId(), ...data };
-    persistProducts([...products, product]);
-    return product;
-  }, [products, persistProducts]);
+  const createProduct = useCallback(async (input) => {
+    const prod = await api.createProduct(input);
+    setProducts(ps => [prod, ...ps]);
+    return prod;
+  }, []);
 
-  const updateProduct = useCallback((id, updates) => {
-    let updated = null;
-    persistProducts(products.map(p => {
-      if (p.id === id) {
-        updated = { ...p, ...updates };
-        return updated;
-      }
-      return p;
-    }));
-    return updated;
-  }, [products, persistProducts]);
+  const updateProduct = useCallback(async (id, updates) => {
+    const prod = await api.updateProduct(id, updates);
+    setProducts(ps => ps.map(p => (p.id === id ? prod : p)));
+    return prod;
+  }, []);
 
-  const deleteProduct = useCallback((id) => {
-    persistProducts(products.map(p => (p.id === id ? { ...p, isDeleted: true } : p)));
-  }, [products, persistProducts]);
+  const bulkUpdate = useCallback(async (ids, updates) => {
+    const rows = await api.updateProducts(ids, updates);
+    const byId = new Map(rows.map(r => [r.id, r]));
+    setProducts(ps => ps.map(p => byId.get(p.id) || p));
+    return rows;
+  }, []);
 
-  const deleteProducts = useCallback((ids) => {
-    const set = new Set(ids);
-    persistProducts(products.map(p => (set.has(p.id) ? { ...p, isDeleted: true } : p)));
-  }, [products, persistProducts]);
+  const bulkCreate = useCallback(async (items) => {
+    const rows = await api.insertProducts(items);
+    setProducts(ps => [...rows, ...ps]);
+    return rows;
+  }, []);
 
-  const bulkUpdate = useCallback((ids, updates) => {
-    const set = new Set(ids);
-    persistProducts(products.map(p => (set.has(p.id) ? { ...p, ...updates } : p)));
-  }, [products, persistProducts]);
+  const deleteProduct = useCallback(async (id) => {
+    await api.deleteProducts([id]);
+    setProducts(ps => ps.filter(p => p.id !== id));
+  }, []);
 
-  const bulkCreate = useCallback((items) => {
-    const created = items.map(p => ({ id: storage.createLocalId(), ...p }));
-    persistProducts([...products, ...created]);
-    return created;
-  }, [products, persistProducts]);
+  const deleteProducts = useCallback(async (ids) => {
+    await api.deleteProducts(ids);
+    setProducts(ps => ps.filter(p => !ids.includes(p.id)));
+  }, []);
 
   const moveProduct = useCallback((productId, categoryId) => {
-    persistProducts(products.map(p => (p.id === productId ? { ...p, categoryId } : p)));
-  }, [products, persistProducts]);
+    return bulkUpdate([productId], { categoryId });
+  }, [bulkUpdate]);
+
+  const setVisible = useCallback((ids, visible) => {
+    return bulkUpdate(ids, { distributorVisible: visible });
+  }, [bulkUpdate]);
+
+  const savePrices = useCallback(async (rows) => {
+    let count = 0;
+    for (const r of rows) {
+      await api.updateProduct(r.id, { costPrice: r.costPrice, sellingPrice: r.sellingPrice });
+      count++;
+    }
+    const byId = new Map(rows.map(r => [r.id, r]));
+    setProducts(ps => ps.map(p => (byId.has(p.id) ? { ...p, ...byId.get(p.id) } : p)));
+    return count;
+  }, []);
 
   const value = {
     ready,
+    error,
+    refresh,
     categories,
     products,
     createCategory,
     deleteCategory,
     createProduct,
     updateProduct,
-    deleteProduct,
-    deleteProducts,
     bulkUpdate,
     bulkCreate,
+    deleteProduct,
+    deleteProducts,
     moveProduct,
+    setVisible,
+    savePrices,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
