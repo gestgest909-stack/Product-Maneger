@@ -1,4 +1,4 @@
-$port = 3000
-Write-Host "Starting server at http://localhost:$port" -ForegroundColor Green
+$port = 5173
+Write-Host "Starting Vite dev server at http://localhost:$port" -ForegroundColor Green
 Start-Process "http://localhost:$port"
-npx serve . --port $port --no-clipboard
+npm run dev
