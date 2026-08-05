@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>بوابة الموزع</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='12' y='30' width='76' height='60' rx='10' fill='%239FF500'/%3E%3Crect x='12' y='10' width='76' height='25' rx='8' fill='%238BDA00'/%3E%3Crect x='42' y='10' width='16' height='12' rx='3' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.0/css/all.min.css" integrity="sha512-ApSLB1Pd3/bZN8fWB/RG9YhN/7bd9Hkf3AGaE2mPfebjrxagjuBtx2GcgdqIlJkUzwylBo61r9Xa9NmgBI0swA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="logo">
+        <h1><i class="fa-solid fa-truck"></i> بوابة الموزع</h1>
+      </div>
+      <div class="topbar-actions">
+        <a href="index.html" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> العودة للإدارة</a>
+      </div>
+    </header>
+
+    <div id="loginView" class="distributor-view">
+      <div class="distributor-card">
+        <div class="distributor-card-icon"><i class="fa-solid fa-lock"></i></div>
+        <h2>تسجيل الدخول</h2>
+        <input type="password" id="distPassword" class="distributor-input" placeholder="كلمة المرور" />
+        <button id="loginBtn" class="btn btn-primary">دخول</button>
+        <div id="loginError" class="message-div"></div>
+      </div>
+    </div>
+
+    <div id="workView" class="distributor-view hidden">
+      <div id="distMessage" class="message-div"></div>
+      <div class="distributor-toolbar">
+        <h2 id="pendingTitle">المنتجات بانتظار التسعير</h2>
+        <button id="savePricesBtn" class="btn btn-primary"><i class="fa-solid fa-save"></i> حفظ الأسعار</button>
+      </div>
+      <div class="table-wrap">
+        <table class="distributor-table">
+          <thead>
+            <tr><th>#</th><th>المنتج</th><th>سعر التكلفة</th><th>سعر البيع المقترح</th></tr>
+          </thead>
+          <tbody id="pendingTableBody"></tbody>
+        </table>
+      </div>
+      <div id="pendingEmpty" class="empty-state hidden">
+        <i class="fa-solid fa-check-circle"></i><p>لا توجد منتجات بانتظار التسعير</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/distributor.js"></script>
+</body>
+</html>

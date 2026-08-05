@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مدير المنتجات - PIM</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='12' y='30' width='76' height='60' rx='10' fill='%239FF500'/%3E%3Crect x='12' y='10' width='76' height='25' rx='8' fill='%238BDA00'/%3E%3Crect x='42' y='10' width='16' height='12' rx='3' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.0/css/all.min.css" integrity="sha512-ApSLB1Pd3/bZN8fWB/RG9YhN/7bd9Hkf3AGaE2mPfebjrxagjuBtx2GcgdqIlJkUzwylBo61r9Xa9NmgBI0swA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="logo">
+        <h1><i class="fa-solid fa-cube"></i> مدير المنتجات</h1>
+      </div>
+      <div class="search-wrapper">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="searchInput" placeholder="يبحث عن المنتجات..." />
+      </div>
+      <div class="topbar-actions">
+        <input type="file" id="csvFileInput" accept=".csv" hidden />
+        <button id="importBtn" class="btn btn-secondary"><i class="fa-solid fa-download"></i> استيراد CSV</button>
+        <button id="exportBtn" class="btn btn-secondary"><i class="fa-solid fa-upload"></i> تصدير إلى CSV</button>
+        <button id="viewPricedBtn" class="btn btn-secondary"><i class="fa-solid fa-tags"></i> الأسعار الجاهزة</button>
+        <a href="distributor.html" target="_blank" class="btn btn-secondary" id="distributorLink"><i class="fa-solid fa-truck"></i> صفحة الموزع</a>
+      </div>
+    </header>
+
+    <div id="dashboardStats" class="dashboard-stats">
+      <div class="stat-card">
+        <span class="stat-icon"><i class="fa-solid fa-cube"></i></span>
+        <div class="stat-body">
+          <span class="stat-number" id="statTotal">0</span>
+          <span class="stat-label">إجمالي المنتجات</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon"><i class="fa-solid fa-check-circle"></i></span>
+        <div class="stat-body">
+          <span class="stat-number" id="statReady">0</span>
+          <span class="stat-label">جاهزة للنشر</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon"><i class="fa-solid fa-coins"></i></span>
+        <div class="stat-body">
+          <span class="stat-number" id="statValue">0 د.أ</span>
+          <span class="stat-label">إجمالي قيمة المخزون</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="layout">
+      <aside id="sidebar">
+        <div class="sidebar-header">
+          <h2>التصنيفات</h2>
+        </div>
+        <div class="add-category-form">
+          <div class="pill-input">
+            <input type="text" id="categoryInput" placeholder="اسم تصنيف جديد" />
+            <button id="addCategoryBtn" class="btn btn-primary">إضافة</button>
+          </div>
+        </div>
+        <ul id="categoryList"></ul>
+      </aside>
+
+      <main id="main">
+        <div class="main-header">
+          <h2 id="currentCategoryTitle">جميع المنتجات</h2>
+          <div class="header-controls">
+            <select id="sortSelect" class="sort-select">
+              <option value="newest">الأحدث</option>
+              <option value="oldest">الأقدم</option>
+              <option value="price-asc">السعر: من الأقل</option>
+              <option value="price-desc">السعر: من الأعلى</option>
+              <option value="name-asc">الاسم: أ-ي</option>
+              <option value="name-desc">الاسم: ي-أ</option>
+            </select>
+            <button id="addProductBtn" class="btn btn-primary">+ إضافة منتج</button>
+          </div>
+        </div>
+        <div id="productsGrid"></div>
+      </main>
+    </div>
+  </div>
+
+  <div id="bulkToolbar" class="bulk-toolbar hidden">
+    <span id="bulkCount" class="bulk-count">تم تحديد 0 منتجات</span>
+    <div class="bulk-actions">
+      <select id="bulkMoveSelect" class="sort-select">
+        <option value="">نقل إلى تصنيف...</option>
+      </select>
+      <button id="bulkStatusBtn" class="btn btn-secondary">تعيين جاهز للنشر</button>
+      <button id="bulkSendBtn" class="btn btn-secondary"><i class="fa-solid fa-truck"></i> إرسال إلى الموزع</button>
+      <button id="bulkDeleteBtn" class="btn btn-danger"><i class="fa-solid fa-trash-can"></i> حذف المحدد</button>
+      <button id="selectAllBtn" class="btn btn-secondary">تحديد الكل</button>
+      <button id="bulkMoveBtn" class="btn btn-primary">نقل</button>
+    </div>
+  </div>
+
+  <div id="modalOverlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">إضافة منتج جديد</h3>
+        <button id="modalCloseBtn" class="modal-close">&times;</button>
+      </div>
+      <form id="productForm">
+        <input type="hidden" id="productId" />
+        <div class="form-group">
+          <label for="productName">الاسم</label>
+          <input type="text" id="productName" required />
+        </div>
+        <div class="form-group">
+          <label for="productDescription">الوصف</label>
+          <textarea id="productDescription" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="productStatus">الحالة</label>
+          <select id="productStatus">
+            <option value="draft">مسودة</option>
+            <option value="ready">جاهز للنشر</option>
+            <option value="published">منشور</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="productPrice">سعر البيع</label>
+          <input type="number" id="productPrice" step="0.01" required />
+        </div>
+        <div class="form-group">
+          <label for="productCostPrice">سعر التكلفة</label>
+          <input type="number" id="productCostPrice" step="0.01" />
+        </div>
+        <div class="form-group">
+          <label for="productStock">الكمية</label>
+          <input type="number" id="productStock" min="0" />
+        </div>
+        <div class="form-group">
+          <label for="productUrl">رابط المنتج</label>
+          <input type="url" id="productUrl" />
+        </div>
+        <div class="form-group">
+          <label for="productImageUrl">رابط الصورة</label>
+          <input type="url" id="productImageUrl" />
+        </div>
+        <div class="image-preview-wrapper" id="imagePreviewWrapper">
+          <img id="imagePreview" alt="معاينة الصورة" />
+          <div class="image-upload-area">
+            <input type="file" id="imageFileInput" accept="image/*" hidden />
+            <input type="hidden" id="productImageData" />
+            <button type="button" id="uploadImageBtn" class="btn btn-secondary">رفع صورة من الجهاز</button>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="saveProductBtn">حفظ</button>
+          <button type="button" class="btn btn-secondary" id="cancelProductBtn">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="confirmOverlay" class="modal-overlay hidden">
+    <div class="modal confirm-modal">
+      <div class="modal-header">
+        <h3>تأكيد الحذف</h3>
+      </div>
+      <p id="confirmMessage">هل أنت متأكد من الحذف؟</p>
+      <div class="form-actions">
+        <button id="confirmYes" class="btn btn-danger">نعم، احذف</button>
+        <button id="confirmNo" class="btn btn-secondary">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer"></div>
+
+  <div id="pricedOverlay" class="modal-overlay hidden">
+    <div class="modal priced-modal">
+      <div class="modal-header">
+        <h3>الأسعار من الموزع</h3>
+        <button id="pricedCloseBtn" class="modal-close">&times;</button>
+      </div>
+      <div id="pricedMessage" class="message-div"></div>
+      <div class="priced-body">
+        <table class="priced-table">
+          <thead>
+            <tr><th>المنتج</th><th>سعر التكلفة</th><th>سعر البيع</th><th></th></tr>
+          </thead>
+          <tbody id="pricedTableBody"></tbody>
+        </table>
+        <div id="pricedEmpty" class="empty-state hidden">
+          <i class="fa-solid fa-check-circle"></i><p>لا توجد منتجات مسعّرة بعد</p>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button id="applyAllPricesBtn" class="btn btn-primary">تطبيق كل الأسعار محلياً</button>
+        <button id="pricedCancelBtn" class="btn btn-secondary">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <nav class="mobile-tabbar" id="mobileTabbar">
+    <button class="tab-item active" data-tab="products">
+      <i class="fa-solid fa-cube"></i>
+      <span>المنتجات</span>
+    </button>
+    <button class="tab-item" data-tab="categories">
+      <i class="fa-solid fa-list"></i>
+      <span>التصنيفات</span>
+    </button>
+    <button class="tab-fab" id="mobileAddBtn">
+      <i class="fa-solid fa-plus"></i>
+    </button>
+    <button class="tab-item" data-tab="search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <span>بحث</span>
+    </button>
+  </nav>
+
+  <div id="mobileSearchBar" class="mobile-search-bar hidden">
+    <input type="text" id="mobileSearchInput" placeholder="يبحث عن المنتجات..." />
+  </div>
+
+  <div id="categorySheetOverlay" class="bottom-sheet-overlay hidden">
+    <div class="bottom-sheet">
+      <div class="sheet-grabber"></div>
+      <div class="sheet-header">
+        <h3>التصنيفات</h3>
+        <button class="sheet-close" id="categorySheetClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="add-category-form">
+        <div class="pill-input">
+          <input type="text" id="mobileCategoryInput" placeholder="اسم تصنيف جديد" />
+          <button id="mobileAddCategoryBtn" class="btn btn-primary">إضافة</button>
+        </div>
+      </div>
+      <ul class="sheet-body" id="mobileCategoryList"></ul>
+    </div>
+  </div>
+
+  <div id="contextMenuOverlay" class="context-menu-overlay hidden">
+    <div class="context-menu" id="contextMenu">
+      <button data-action="move"><i class="fa-solid fa-arrow-right"></i> نقل إلى تصنيف...</button>
+      <button data-action="send"><i class="fa-solid fa-truck"></i> إرسال إلى الموزع</button>
+      <button data-action="edit"><i class="fa-solid fa-pencil"></i> تعديل</button>
+      <button data-action="delete"><i class="fa-solid fa-trash-can"></i> حذف</button>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
