@@ -1,24 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import { formatPrice } from '../lib/utils';
 import RequestedProducts from './RequestedProducts';
 import CurrentOrders from './CurrentOrders';
-
-function getAvailabilityReason(product, requests, orders) {
-  if (!product.distributorVisible) return null;
-  const productRequests = requests.filter(r => r.productId === product.id);
-  const productOrders = orders.filter(o => o.productId === product.id);
-  const all = [...productRequests, ...productOrders];
-  if (all.length === 0) return 'manual';
-  const sorted = [...all].sort((a, b) => b.id - a.id);
-  const latest = sorted[0];
-  if (latest.status === 'approved') {
-    const hasRejection = sorted.some(item => item.status === 'rejected');
-    return hasRejection ? 'rejectedThenApproved' : 'approved';
-  }
-  return 'rejected';
-}
+import GuestRow from './GuestRow';
+import BulkActionsSheet from './BulkActionsSheet';
 
 function isDirty(product, entry) {
   if (!entry) return false;
@@ -30,96 +17,6 @@ function isDirty(product, entry) {
   const curSelling = s === undefined ? baseSelling : s;
   return String(curCost ?? '') !== String(baseCost ?? '') ||
          String(curSelling ?? '') !== String(baseSelling ?? '');
-}
-
-const AVAILABILITY_LABELS = {
-  approved: 'موافق عليه',
-  rejectedThenApproved: 'مؤكد مع سجل',
-  manual: 'مرئي يدوياً',
-  rejected: 'مرفوض',
-};
-
-const AVAILABILITY_CLASS = {
-  approved: 'availability-approved',
-  rejectedThenApproved: 'availability-rejectedThenApproved',
-  manual: 'availability-manual',
-  rejected: 'availability-rejected',
-};
-
-function GuestRow({ product, prices, dirty, onChange, onSave, busy, requests, orders }) {
-  const cost = prices.costPrice ?? (product.costPrice ?? '');
-  const selling = prices.sellingPrice ?? (product.sellingPrice ?? '');
-  const hasImage = !!(product.imageUrl || product.imageData);
-  const handleSubmit = (e) => { e.preventDefault(); onSave(product); };
-  const availabilityReason = getAvailabilityReason(product, requests, orders);
-  const availabilityLabel = availabilityReason ? AVAILABILITY_LABELS[availabilityReason] : null;
-  const availabilityClass = availabilityReason ? AVAILABILITY_CLASS[availabilityReason] : null;
-
-  return (
-    <div className={`guest-row${dirty ? ' is-dirty' : ''}`}>
-      <div className="guest-card-image">
-        {hasImage ? (
-          <img src={product.imageUrl || product.imageData} alt={product.name} loading="lazy" />
-        ) : (
-          <div className="guest-card-image-placeholder" aria-hidden="true">
-            <i className="fa-solid fa-image" />
-          </div>
-        )}
-      </div>
-      <div className="guest-card-content">
-        <div className="guest-product-info">
-          <span className="guest-product-name">{product.name}</span>
-          {product.description && <span className="guest-product-desc">{product.description}</span>}
-          {product.price > 0 && (
-            <span className="guest-price-pill">
-              <i className="fa-solid fa-tag" />
-              السعر المقترح: {formatPrice(product.price)}
-            </span>
-          )}
-          {availabilityLabel && (
-            <span className={`availability-pill ${availabilityClass}`} title={availabilityLabel}>
-              <i className={`fa-solid ${availabilityReason === 'approved' || availabilityReason === 'rejectedThenApproved' ? 'fa-check-circle' : availabilityReason === 'manual' ? 'fa-gear' : 'fa-circle-xmark'}`} />
-              {availabilityLabel}
-            </span>
-          )}
-        </div>
-        <form className="guest-price-inputs" onSubmit={handleSubmit}>
-          <div className="guest-price-field">
-            <label htmlFor={`cost-${product.id}`}>سعر التكلفة</label>
-            <input
-              id={`cost-${product.id}`}
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              autoComplete="off"
-              placeholder="0.00"
-              value={cost === '' ? '' : cost}
-              onChange={e => onChange('costPrice', e.target.value)}
-            />
-          </div>
-          <div className="guest-price-field">
-            <label htmlFor={`selling-${product.id}`}>سعر البيع</label>
-            <input
-              id={`selling-${product.id}`}
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              autoComplete="off"
-              placeholder="0.00"
-              value={selling === '' ? '' : selling}
-              onChange={e => onChange('sellingPrice', e.target.value)}
-            />
-          </div>
-          <button type="submit" className="btn btn-primary guest-save-btn" disabled={busy}>
-            <i className="fa-solid fa-save" />
-            <span>حفظ</span>
-          </button>
-        </form>
-      </div>
-    </div>
-  );
 }
 
 const GUEST_TABS = [
@@ -134,6 +31,11 @@ export default function GuestGrid() {
   const [entries, setEntries] = useState({});
   const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState('available');
+  const [savingIds, setSavingIds] = useState(new Set());
+  const [savedIds, setSavedIds] = useState(new Set());
+  const [errorIds, setErrorIds] = useState(new Map());
+  const [quickEntryMode, setQuickEntryMode] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const visible = useMemo(
     () => products.filter(p => p.distributorVisible).sort((a, b) => a.id - b.id),
@@ -152,6 +54,11 @@ export default function GuestGrid() {
 
   const editedCount = useMemo(
     () => visible.reduce((n, p) => n + (isDirty(p, entries[p.id]) ? 1 : 0), 0),
+    [visible, entries]
+  );
+
+  const changedProductsList = useMemo(
+    () => visible.filter(p => isDirty(p, entries[p.id])),
     [visible, entries]
   );
 
@@ -177,19 +84,23 @@ export default function GuestGrid() {
       showToast('أدخل قيماً رقمية صحيحة', 'error');
       return;
     }
-    setBusy(true);
+    setSavingIds(prev => new Set(prev).add(product.id));
+    setErrorIds(prev => { const next = new Map(prev); next.delete(product.id); return next; });
     try {
-      const count = await savePrices([row]);
+      await savePrices([row]);
       setEntries(prev => {
         const next = { ...prev };
         delete next[product.id];
         return next;
       });
+      setSavedIds(prev => new Set(prev).add(product.id));
+      setTimeout(() => setSavedIds(prev => { const next = new Set(prev); next.delete(product.id); return next; }), 1500);
       showToast(`<i class="fa-solid fa-check-circle"></i> تم حفظ أسعار "${product.name}"`);
     } catch (err) {
+      setErrorIds(prev => { const next = new Map(prev); next.set(product.id, err.message); return next; });
       showToast(`<i class="fa-solid fa-circle-xmark"></i> فشل الحفظ: ${err.message}`, 'error', 5000);
     } finally {
-      setBusy(false);
+      setSavingIds(prev => { const next = new Set(prev); next.delete(product.id); return next; });
     }
   }
 
@@ -215,12 +126,11 @@ export default function GuestGrid() {
       showToast('لا توجد تغييرات لحفظها', 'error');
       return;
     }
-    if (!window.confirm(`حفظ الأسعار لـ ${rows.length} منتج؟`)) return;
     setBusy(true);
     try {
-      const count = await savePrices(rows);
+      await savePrices(rows);
       setEntries({});
-      showToast(`<i class="fa-solid fa-check-circle"></i> تم حفظ أسعار ${count} منتج بنجاح`);
+      showToast(`<i class="fa-solid fa-check-circle"></i> تم حفظ أسعار ${rows.length} منتج بنجاح`);
     } catch (err) {
       showToast(`<i class="fa-solid fa-circle-xmark"></i> فشل الحفظ: ${err.message}`, 'error', 5000);
     } finally {
@@ -266,33 +176,86 @@ export default function GuestGrid() {
                   <h2>المنتجات المتوفره</h2>
                   <span className="guest-count-pill">{visible.length} منتج</span>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-primary guest-saveall-btn"
-                  onClick={saveAll}
-                  disabled={busy || editedCount === 0}
-                >
-                  <i className="fa-solid fa-save" />
-                  <span>حفظ كل التغييرات</span>
-                  {editedCount > 0 && <span className="guest-edited-badge">{editedCount}</span>}
-                </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', cursor: 'pointer', background: 'var(--surface)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                    <input
+                      type="checkbox"
+                      checked={quickEntryMode}
+                      onChange={(e) => setQuickEntryMode(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span>وضع الإدخال السريع</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-primary guest-saveall-btn"
+                    onClick={() => setSheetOpen(true)}
+                    disabled={busy || editedCount === 0}
+                  >
+                    <i className="fa-solid fa-save" />
+                    <span>حفظ كل التغييرات</span>
+                    {editedCount > 0 && <span className="guest-edited-badge">{editedCount}</span>}
+                  </button>
+                </div>
               </div>
 
               <div id="guestList">
-                {visible.map(product => (
-                  <GuestRow
-                    key={product.id}
-                    product={product}
-                    prices={entries[product.id] || {}}
-                    dirty={isDirty(product, entries[product.id])}
-                    onChange={(field, value) => onChange(product.id, field, value)}
-                    onSave={saveOne}
-                    busy={busy}
-                    requests={requests}
-                    orders={orders}
-                  />
-                ))}
+                {visible.map((product, index) => {
+                  const dirty = isDirty(product, entries[product.id]);
+                  return (
+                    <GuestRow
+                      key={product.id}
+                      product={product}
+                      prices={entries[product.id] || {}}
+                      dirty={dirty}
+                      saving={savingIds.has(product.id)}
+                      saved={savedIds.has(product.id)}
+                      error={errorIds.get(product.id) || null}
+                      onChange={(field, value) => onChange(product.id, field, value)}
+                      onSave={saveOne}
+                      onHide={(p) => {
+                        showToast(`تم إخفاء "${p.name}" (مؤقت)`);
+                      }}
+                      onRequest={(p) => {
+                        showToast(`تم إرسال طلب توريد لـ "${p.name}"`);
+                      }}
+                      onDuplicate={(p) => {
+                        if (index > 0) {
+                          const prevProduct = visible[index - 1];
+                          const prevEntry = entries[prevProduct.id] || {};
+                          const c = prevEntry.costPrice !== undefined ? prevEntry.costPrice : prevProduct.costPrice;
+                          const s = prevEntry.sellingPrice !== undefined ? prevEntry.sellingPrice : prevProduct.sellingPrice;
+                          if (c !== null || s !== null) {
+                            onChange(p.id, 'costPrice', c ?? '');
+                            onChange(p.id, 'sellingPrice', s ?? '');
+                            showToast(`تم نسخ الأسعار من "${prevProduct.name}"`);
+                          }
+                        }
+                      }}
+                      quickEntryMode={quickEntryMode}
+                      onNextRow={(currentId) => {
+                        const nextIdx = visible.findIndex(p => p.id === currentId) + 1;
+                        if (nextIdx < visible.length) {
+                          const nextId = visible[nextIdx].id;
+                          const el = document.getElementById(`cost-${nextId}`);
+                          el?.focus();
+                        }
+                      }}
+                      requests={requests}
+                      orders={orders}
+                    />
+                  );
+                })}
               </div>
+
+              <BulkActionsSheet
+                isOpen={sheetOpen}
+                onClose={() => setSheetOpen(false)}
+                changedProducts={changedProductsList}
+                entries={entries}
+                onSaveAll={saveAll}
+                busy={busy}
+              />
 
               <div className="guest-saveall-bar" role="region" aria-label="حفظ كل التغييرات">
                 <span className="guest-saveall-count">
@@ -301,7 +264,7 @@ export default function GuestGrid() {
                 <button
                   type="button"
                   className="btn btn-primary guest-saveall-btn"
-                  onClick={saveAll}
+                  onClick={() => setSheetOpen(true)}
                   disabled={busy || editedCount === 0}
                 >
                   <i className="fa-solid fa-save" />
