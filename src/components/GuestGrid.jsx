@@ -2,6 +2,23 @@ import { useMemo, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import { formatPrice } from '../lib/utils';
+import RequestedProducts from './RequestedProducts';
+import CurrentOrders from './CurrentOrders';
+
+function getAvailabilityReason(product, requests, orders) {
+  if (!product.distributorVisible) return null;
+  const productRequests = requests.filter(r => r.productId === product.id);
+  const productOrders = orders.filter(o => o.productId === product.id);
+  const all = [...productRequests, ...productOrders];
+  if (all.length === 0) return 'manual';
+  const sorted = [...all].sort((a, b) => b.id - a.id);
+  const latest = sorted[0];
+  if (latest.status === 'approved') {
+    const hasRejection = sorted.some(item => item.status === 'rejected');
+    return hasRejection ? 'rejectedThenApproved' : 'approved';
+  }
+  return 'rejected';
+}
 
 function isDirty(product, entry) {
   if (!entry) return false;
@@ -15,11 +32,28 @@ function isDirty(product, entry) {
          String(curSelling ?? '') !== String(baseSelling ?? '');
 }
 
-function GuestRow({ product, prices, dirty, onChange, onSave, busy }) {
+const AVAILABILITY_LABELS = {
+  approved: 'موافق عليه',
+  rejectedThenApproved: 'مؤكد مع سجل',
+  manual: 'مرئي يدوياً',
+  rejected: 'مرفوض',
+};
+
+const AVAILABILITY_CLASS = {
+  approved: 'availability-approved',
+  rejectedThenApproved: 'availability-rejectedThenApproved',
+  manual: 'availability-manual',
+  rejected: 'availability-rejected',
+};
+
+function GuestRow({ product, prices, dirty, onChange, onSave, busy, requests, orders }) {
   const cost = prices.costPrice ?? (product.costPrice ?? '');
   const selling = prices.sellingPrice ?? (product.sellingPrice ?? '');
   const hasImage = !!(product.imageUrl || product.imageData);
   const handleSubmit = (e) => { e.preventDefault(); onSave(product); };
+  const availabilityReason = getAvailabilityReason(product, requests, orders);
+  const availabilityLabel = availabilityReason ? AVAILABILITY_LABELS[availabilityReason] : null;
+  const availabilityClass = availabilityReason ? AVAILABILITY_CLASS[availabilityReason] : null;
 
   return (
     <div className={`guest-row${dirty ? ' is-dirty' : ''}`}>
@@ -40,6 +74,12 @@ function GuestRow({ product, prices, dirty, onChange, onSave, busy }) {
             <span className="guest-price-pill">
               <i className="fa-solid fa-tag" />
               السعر المقترح: {formatPrice(product.price)}
+            </span>
+          )}
+          {availabilityLabel && (
+            <span className={`availability-pill ${availabilityClass}`} title={availabilityLabel}>
+              <i className={`fa-solid ${availabilityReason === 'approved' || availabilityReason === 'rejectedThenApproved' ? 'fa-check-circle' : availabilityReason === 'manual' ? 'fa-gear' : 'fa-circle-xmark'}`} />
+              {availabilityLabel}
             </span>
           )}
         </div>
@@ -82,15 +122,32 @@ function GuestRow({ product, prices, dirty, onChange, onSave, busy }) {
   );
 }
 
+const GUEST_TABS = [
+  { id: 'available', label: 'المنتجات المتوفره', icon: 'fa-box-open' },
+  { id: 'requests', label: 'المنتجات نريد توفيرها', icon: 'fa-hand-holding-heart' },
+  { id: 'orders', label: 'الطلبات الحالية', icon: 'fa-clipboard-list' },
+];
+
 export default function GuestGrid() {
-  const { products, savePrices } = useData();
+  const { products, savePrices, requests, orders } = useData();
   const { showToast } = useToast();
   const [entries, setEntries] = useState({});
   const [busy, setBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState('available');
 
   const visible = useMemo(
     () => products.filter(p => p.distributorVisible).sort((a, b) => a.id - b.id),
     [products]
+  );
+
+  const pendingRequestsCount = useMemo(
+    () => requests.filter(r => r.status === 'pending').length,
+    [requests]
+  );
+
+  const pendingOrdersCount = useMemo(
+    () => orders.filter(o => o.status === 'pending').length,
+    [orders]
   );
 
   const editedCount = useMemo(
@@ -108,7 +165,7 @@ export default function GuestGrid() {
     return {
       id: product.id,
       costPrice: costRaw === '' ? product.costPrice ?? null : parseFloat(costRaw),
-      sellingPrice: sellingRaw === '' ? product.sellingPrice ?? null : parseFloat(sellingRaw),
+      sellingPrice: sellingRaw === '' || sellingRaw === undefined ? product.sellingPrice ?? null : parseFloat(sellingRaw),
     };
   }
 
@@ -171,64 +228,93 @@ export default function GuestGrid() {
     }
   }
 
-  if (visible.length === 0) {
-    return (
-      <div id="guestView">
-        <div className="empty-state">
-          <i className="fa-solid fa-box-open" />
-          <p>لا توجد منتجات متاحة للتسعير حالياً</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div id="guestView">
-      <div className="guest-page-header">
-        <div className="guest-page-title">
-          <h2>المنتجات المتاحة للتسعير</h2>
-          <span className="guest-count-pill">{visible.length} منتج</span>
-        </div>
-        <button
-          type="button"
-          className="btn btn-primary guest-saveall-btn"
-          onClick={saveAll}
-          disabled={busy || editedCount === 0}
-        >
-          <i className="fa-solid fa-save" />
-          <span>حفظ كل التغييرات</span>
-          {editedCount > 0 && <span className="guest-edited-badge">{editedCount}</span>}
-        </button>
-      </div>
-
-      <div id="guestList">
-        {visible.map(product => (
-          <GuestRow
-            key={product.id}
-            product={product}
-            prices={entries[product.id] || {}}
-            dirty={isDirty(product, entries[product.id])}
-            onChange={(field, value) => onChange(product.id, field, value)}
-            onSave={saveOne}
-            busy={busy}
-          />
+      <div className="guest-tabs" role="tablist" aria-label="أقسام الموزع">
+        {GUEST_TABS.map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            className={`guest-tab${activeTab === tab.id ? ' active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            <i className={`fa-solid ${tab.icon}`} aria-hidden="true" />
+            <span>{tab.label}</span>
+            {tab.id === 'requests' && pendingRequestsCount > 0 && (
+              <span className="guest-tab-badge" aria-label={`${pendingRequestsCount} طلب قيد الانتظار`}>{pendingRequestsCount}</span>
+            )}
+            {tab.id === 'orders' && pendingOrdersCount > 0 && (
+              <span className="guest-tab-badge" aria-label={`${pendingOrdersCount} طلب قيد الانتظار`}>{pendingOrdersCount}</span>
+            )}
+          </button>
         ))}
       </div>
 
-      <div className="guest-saveall-bar" role="region" aria-label="حفظ كل التغييرات">
-        <span className="guest-saveall-count">
-          {editedCount > 0 ? `${editedCount} سعر معدّل` : 'لا تغييرات'}
-        </span>
-        <button
-          type="button"
-          className="btn btn-primary guest-saveall-btn"
-          onClick={saveAll}
-          disabled={busy || editedCount === 0}
-        >
-          <i className="fa-solid fa-save" />
-          <span>حفظ كل التغييرات</span>
-        </button>
-      </div>
+      {activeTab === 'available' && (
+        <div role="tabpanel">
+          {visible.length === 0 ? (
+            <div className="empty-state">
+              <i className="fa-solid fa-box-open" />
+              <p>لا توجد منتجات متاحة للتسعير حالياً</p>
+            </div>
+          ) : (
+            <>
+              <div className="guest-page-header">
+                <div className="guest-page-title">
+                  <h2>المنتجات المتوفره</h2>
+                  <span className="guest-count-pill">{visible.length} منتج</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary guest-saveall-btn"
+                  onClick={saveAll}
+                  disabled={busy || editedCount === 0}
+                >
+                  <i className="fa-solid fa-save" />
+                  <span>حفظ كل التغييرات</span>
+                  {editedCount > 0 && <span className="guest-edited-badge">{editedCount}</span>}
+                </button>
+              </div>
+
+              <div id="guestList">
+                {visible.map(product => (
+                  <GuestRow
+                    key={product.id}
+                    product={product}
+                    prices={entries[product.id] || {}}
+                    dirty={isDirty(product, entries[product.id])}
+                    onChange={(field, value) => onChange(product.id, field, value)}
+                    onSave={saveOne}
+                    busy={busy}
+                    requests={requests}
+                    orders={orders}
+                  />
+                ))}
+              </div>
+
+              <div className="guest-saveall-bar" role="region" aria-label="حفظ كل التغييرات">
+                <span className="guest-saveall-count">
+                  {editedCount > 0 ? `${editedCount} سعر معدّل` : 'لا تغييرات'}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-primary guest-saveall-btn"
+                  onClick={saveAll}
+                  disabled={busy || editedCount === 0}
+                >
+                  <i className="fa-solid fa-save" />
+                  <span>حفظ كل التغييرات</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'requests' && <RequestedProducts />}
+      {activeTab === 'orders' && <CurrentOrders />}
     </div>
   );
 }

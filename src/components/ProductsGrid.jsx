@@ -2,6 +2,33 @@ import InlineEdit from './InlineEdit';
 import { formatPrice } from '../lib/utils';
 
 const STATUS_LABELS = { draft: 'مسودة', ready: 'جاهز للنشر', published: 'منشور' };
+const AVAILABILITY_LABELS = {
+  approved: 'موافق عليه',
+  rejectedThenApproved: 'مؤكد مع سجل',
+  manual: 'مرئي يدوياً',
+  rejected: 'مرفوض',
+};
+const AVAILABILITY_CLASS = {
+  approved: 'availability-approved',
+  rejectedThenApproved: 'availability-amber',
+  manual: 'availability-manual',
+  rejected: 'availability-rejected',
+};
+
+function getAvailabilityReason(product, requests, orders) {
+  if (!product.distributorVisible) return null;
+  const productRequests = requests.filter(r => r.productId === product.id);
+  const productOrders = orders.filter(o => o.productId === product.id);
+  const all = [...productRequests, ...productOrders];
+  if (all.length === 0) return 'manual';
+  const sorted = [...all].sort((a, b) => b.id - a.id);
+  const latest = sorted[0];
+  if (latest.status === 'approved') {
+    const hasRejection = sorted.some(item => item.status === 'rejected');
+    return hasRejection ? 'rejectedThenApproved' : 'approved';
+  }
+  return 'rejected';
+}
 
 function ProductImage({ product }) {
   const src = product.imageUrl || product.imageData;
@@ -23,6 +50,8 @@ function ProductCard({
   onLongPress,
   onDragStart,
   onToggleVisible,
+  requests,
+  orders,
 }) {
   let longPressTimer = null;
 
@@ -40,6 +69,10 @@ function ProductCard({
       longPressTimer = null;
     }
   }
+
+  const availabilityReason = getAvailabilityReason(product, requests, orders);
+  const availabilityLabel = availabilityReason ? AVAILABILITY_LABELS[availabilityReason] : null;
+  const availabilityClass = availabilityReason ? AVAILABILITY_CLASS[availabilityReason] : null;
 
   return (
     <div
@@ -60,6 +93,7 @@ function ProductCard({
         className="product-checkbox"
         checked={isSelected}
         onChange={() => onToggleSelect(product.id)}
+        aria-label={`تحديد ${product.name}`}
       />
 
       <ProductImage product={product} />
@@ -87,8 +121,11 @@ function ProductCard({
         {product.status && (
           <span className={`status-pill ${product.status}`}>{STATUS_LABELS[product.status] || product.status}</span>
         )}
-        {product.distributorVisible && (
-          <span className="visibility-pill" title="ظاهر للموزع"><i className="fa-solid fa-eye" /> ظاهر للموزع</span>
+        {availabilityLabel && (
+          <span className={`availability-pill ${availabilityClass}`} title={availabilityLabel}>
+            <i className={`fa-solid ${availabilityReason === 'approved' || availabilityReason === 'rejectedThenApproved' ? 'fa-check-circle' : availabilityReason === 'manual' ? 'fa-gear' : 'fa-circle-xmark'}`} />
+            {availabilityLabel}
+          </span>
         )}
         {product.stock !== undefined && product.stock !== null && (
           <span className={`product-stock${product.stock <= 0 ? ' low' : ''}`}>المخزون: {product.stock}</span>
@@ -102,13 +139,13 @@ function ProductCard({
       )}
 
       <div className="product-actions">
-        <button type="button" className="edit-btn" title={product.distributorVisible ? 'إخفاء من الموزع' : 'إظهار للموزع'} onClick={() => onToggleVisible(product)}>
+        <button type="button" className="edit-btn" title={product.distributorVisible ? 'إخفاء من الموزع' : 'إظهار للموزع'} onClick={() => onToggleVisible(product)} aria-label={product.distributorVisible ? 'إخفاء من الموزع' : 'إظهار للموزع'}>
           <i className={`fa-solid ${product.distributorVisible ? 'fa-eye-slash' : 'fa-eye'}`} />
         </button>
-        <button type="button" className="edit-btn" title="تعديل المنتج" onClick={() => onEdit(product)}>
+        <button type="button" className="edit-btn" title="تعديل المنتج" onClick={() => onEdit(product)} aria-label="تعديل المنتج">
           <i className="fa-solid fa-pencil" />
         </button>
-        <button type="button" className="delete-btn" title="حذف المنتج" onClick={() => onDelete(product)}>
+        <button type="button" className="delete-btn" title="حذف المنتج" onClick={() => onDelete(product)} aria-label="حذف المنتج">
           <i className="fa-solid fa-trash-can" />
         </button>
       </div>
@@ -116,7 +153,7 @@ function ProductCard({
   );
 }
 
-export default function ProductsGrid({ products, selectedIds, callbacks }) {
+export default function ProductsGrid({ products, selectedIds, callbacks, requests, orders }) {
   if (products.length === 0) {
     return (
       <div className="empty-state">
@@ -140,6 +177,8 @@ export default function ProductsGrid({ products, selectedIds, callbacks }) {
           onLongPress={callbacks.onLongPress}
           onDragStart={callbacks.onDragStart}
           onToggleVisible={callbacks.onToggleVisible}
+          requests={requests}
+          orders={orders}
         />
       ))}
     </div>

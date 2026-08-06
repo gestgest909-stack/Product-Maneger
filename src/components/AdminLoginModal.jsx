@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-const ADMIN_PASSWORD = 'password123';
+const ADMIN_PASSWORD = 'ghosttest##123';
 
 export default function AdminLoginModal({ open, onClose, onSuccess }) {
   const [password, setPassword] = useState('');

@@ -14,6 +14,8 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import CustomSelect from '../components/CustomSelect';
 import AdminLoginModal from '../components/AdminLoginModal';
 import GuestGrid from '../components/GuestGrid';
+import RequestsManager from '../components/RequestsManager';
+import OrdersManager from '../components/OrdersManager';
 import { MobileTabbar, MobileSearchBar, CategorySheet, ContextMenu } from '../components/Mobile';
 
 const ADMIN_FLAG = 'product_manager_admin';
@@ -29,7 +31,7 @@ const SORT_OPTIONS = [
 
 export default function Admin() {
   const data = useData();
-  const { categories, products, ready } = data;
+  const { categories, products, requests, orders, ready } = data;
   const { showToast } = useToast();
 
   const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem(ADMIN_FLAG) === '1');
@@ -347,6 +349,8 @@ export default function Admin() {
           <ProductsGrid
             products={filtered}
             selectedIds={selectedIds}
+            requests={requests}
+            orders={orders}
             callbacks={{
               toggleSelect,
               onInlineUpdate: handleInlineUpdate,
@@ -370,6 +374,9 @@ export default function Admin() {
         onDelete={handleBulkDelete}
         onMove={handleBulkMove}
       />
+
+      <RequestsManager />
+      <OrdersManager />
 
       <ProductModal
         open={productModal.open}

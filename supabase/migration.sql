@@ -20,11 +20,34 @@ alter table public.products
 alter table public.products alter column status set default 'draft';
 update public.products set status = 'draft' where status = 'pending';
 
+create table if not exists public.distributor_requests (
+  id bigserial primary key,
+  product_id bigint not null references public.products(id) on delete cascade,
+  status varchar not null default 'pending',
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.orders (
+  id bigserial primary key,
+  product_id bigint not null references public.products(id) on delete cascade,
+  quantity integer not null default 1,
+  status varchar not null default 'pending',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists products_distributor_visible_idx on public.products (distributor_visible);
 create index if not exists products_category_id_idx on public.products (category_id);
+create index if not exists distributor_requests_product_id_idx on public.distributor_requests (product_id);
+create index if not exists distributor_requests_status_idx on public.distributor_requests (status);
+create index if not exists orders_product_id_idx on public.orders (product_id);
+create index if not exists orders_status_idx on public.orders (status);
 
 alter table public.products enable row level security;
 alter table public.categories enable row level security;
+alter table public.distributor_requests enable row level security;
+alter table public.orders enable row level security;
 
 drop policy if exists "public read products" on public.products;
 drop policy if exists "public insert products" on public.products;
@@ -45,3 +68,23 @@ create policy "public read categories" on public.categories for select using (tr
 create policy "public insert categories" on public.categories for insert with check (true);
 create policy "public update categories" on public.categories for update using (true);
 create policy "public delete categories" on public.categories for delete using (true);
+
+drop policy if exists "public read distributor_requests" on public.distributor_requests;
+drop policy if exists "public insert distributor_requests" on public.distributor_requests;
+drop policy if exists "public update distributor_requests" on public.distributor_requests;
+drop policy if exists "public delete distributor_requests" on public.distributor_requests;
+
+create policy "public read distributor_requests" on public.distributor_requests for select using (true);
+create policy "public insert distributor_requests" on public.distributor_requests for insert with check (true);
+create policy "public update distributor_requests" on public.distributor_requests for update using (true);
+create policy "public delete distributor_requests" on public.distributor_requests for delete using (true);
+
+drop policy if exists "public read orders" on public.orders;
+drop policy if exists "public insert orders" on public.orders;
+drop policy if exists "public update orders" on public.orders;
+drop policy if exists "public delete orders" on public.orders;
+
+create policy "public read orders" on public.orders for select using (true);
+create policy "public insert orders" on public.orders for insert with check (true);
+create policy "public update orders" on public.orders for update using (true);
+create policy "public delete orders" on public.orders for delete using (true);

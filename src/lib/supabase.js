@@ -61,6 +61,57 @@ function toSnake(obj) {
   return out;
 }
 
+function toCamelRequest(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    productId: row.product_id,
+    status: row.status,
+    note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+const REQUEST_SNAKE_KEYS = {
+  productId: 'product_id',
+  status: 'status',
+  note: 'note',
+};
+
+function toSnakeRequest(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k in REQUEST_SNAKE_KEYS && v !== undefined) out[REQUEST_SNAKE_KEYS[k]] = v;
+  }
+  return out;
+}
+
+function toCamelOrder(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    productId: row.product_id,
+    quantity: row.quantity,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+const ORDER_SNAKE_KEYS = {
+  productId: 'product_id',
+  quantity: 'quantity',
+  status: 'status',
+};
+
+function toSnakeOrder(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k in ORDER_SNAKE_KEYS && v !== undefined) out[ORDER_SNAKE_KEYS[k]] = v;
+  }
+  return out;
+}
+
 // ====== Categories ======
 
 export async function fetchCategories() {
@@ -138,4 +189,62 @@ export async function savePrices(rows) {
     await updateProduct(r.id, { costPrice: r.costPrice, sellingPrice: r.sellingPrice });
   }
   return rows.length;
+}
+
+// ====== Distributor Requests ======
+
+export async function fetchDistributorRequests() {
+  const db = getClient();
+  const { data, error } = await db.from('distributor_requests').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(toCamelRequest);
+}
+
+export async function createDistributorRequest(productId, note) {
+  const db = getClient();
+  const { data, error } = await db.from('distributor_requests').insert({ product_id: productId, note }).select().single();
+  if (error) throw error;
+  return toCamelRequest(data);
+}
+
+export async function updateDistributorRequest(id, updates) {
+  const db = getClient();
+  const { data, error } = await db.from('distributor_requests').update(toSnakeRequest(updates)).eq('id', id).select().single();
+  if (error) throw error;
+  return toCamelRequest(data);
+}
+
+export async function deleteDistributorRequest(id) {
+  const db = getClient();
+  const { error } = await db.from('distributor_requests').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ====== Orders ======
+
+export async function fetchOrders() {
+  const db = getClient();
+  const { data, error } = await db.from('orders').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(toCamelOrder);
+}
+
+export async function createOrder(productId, quantity) {
+  const db = getClient();
+  const { data, error } = await db.from('orders').insert({ product_id: productId, quantity }).select().single();
+  if (error) throw error;
+  return toCamelOrder(data);
+}
+
+export async function updateOrder(id, updates) {
+  const db = getClient();
+  const { data, error } = await db.from('orders').update(toSnakeOrder(updates)).eq('id', id).select().single();
+  if (error) throw error;
+  return toCamelOrder(data);
+}
+
+export async function deleteOrder(id) {
+  const db = getClient();
+  const { error } = await db.from('orders').delete().eq('id', id);
+  if (error) throw error;
 }

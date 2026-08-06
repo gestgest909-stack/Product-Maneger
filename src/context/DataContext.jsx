@@ -10,6 +10,8 @@ export function useData() {
 export function DataProvider({ children }) {
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,9 +22,16 @@ export function DataProvider({ children }) {
       return;
     }
     try {
-      const [cats, prods] = await Promise.all([api.fetchCategories(), api.fetchProducts()]);
+      const [cats, prods, reqs, ords] = await Promise.all([
+        api.fetchCategories(),
+        api.fetchProducts(),
+        api.fetchDistributorRequests(),
+        api.fetchOrders(),
+      ]);
       setCategories(cats);
       setProducts(prods);
+      setRequests(reqs);
+      setOrders(ords);
       setError('');
     } catch (e) {
       setError(e.message);
@@ -104,12 +113,48 @@ export function DataProvider({ children }) {
     return count;
   }, []);
 
+  const createRequest = useCallback(async (productId, note) => {
+    const req = await api.createDistributorRequest(productId, note);
+    setRequests(rs => [req, ...rs]);
+    return req;
+  }, []);
+
+  const updateRequest = useCallback(async (id, updates) => {
+    const req = await api.updateDistributorRequest(id, updates);
+    setRequests(rs => rs.map(r => (r.id === id ? req : r)));
+    return req;
+  }, []);
+
+  const deleteRequest = useCallback(async (id) => {
+    await api.deleteDistributorRequest(id);
+    setRequests(rs => rs.filter(r => r.id !== id));
+  }, []);
+
+  const createOrder = useCallback(async (productId, quantity) => {
+    const ord = await api.createOrder(productId, quantity);
+    setOrders(os => [ord, ...os]);
+    return ord;
+  }, []);
+
+  const updateOrder = useCallback(async (id, updates) => {
+    const ord = await api.updateOrder(id, updates);
+    setOrders(os => os.map(o => (o.id === id ? ord : o)));
+    return ord;
+  }, []);
+
+  const deleteOrder = useCallback(async (id) => {
+    await api.deleteOrder(id);
+    setOrders(os => os.filter(o => o.id !== id));
+  }, []);
+
   const value = {
     ready,
     error,
     refresh,
     categories,
     products,
+    requests,
+    orders,
     createCategory,
     deleteCategory,
     createProduct,
@@ -121,6 +166,12 @@ export function DataProvider({ children }) {
     moveProduct,
     setVisible,
     savePrices,
+    createRequest,
+    updateRequest,
+    deleteRequest,
+    createOrder,
+    updateOrder,
+    deleteOrder,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
